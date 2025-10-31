@@ -150,8 +150,73 @@ def qmark(parent, tip, r, c):
 def run_app():
     root = tk.Tk()
     root.title("论文制图（单图 / 多图） v12")
-    root.geometry("1380x1040")
-    root.columnconfigure(0, weight=1)
+    root.geometry("1380x800")  # 调整默认高度，适应更多屏幕
+
+    # ========= 创建可滚动的主容器 =========
+    # 创建 Canvas 和 Scrollbar
+    main_canvas = tk.Canvas(root, highlightthickness=0)
+    scrollbar = ttk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
+    scrollable_frame = ttk.Frame(main_canvas)
+
+    # 配置 Canvas
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+    )
+
+    canvas_window = main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    main_canvas.configure(yscrollcommand=scrollbar.set)
+
+    # 布局 Canvas 和 Scrollbar
+    main_canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    # 让 scrollable_frame 的宽度跟随 Canvas 宽度
+    def on_canvas_configure(event):
+        main_canvas.itemconfig(canvas_window, width=event.width)
+    main_canvas.bind("<Configure>", on_canvas_configure)
+
+    # 鼠标滚轮支持（Windows 和 Linux）
+    def on_mousewheel(event):
+        # Windows 使用 event.delta
+        main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def on_mousewheel_linux(event):
+        # Linux 使用 Button-4 和 Button-5
+        if event.num == 4:
+            main_canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            main_canvas.yview_scroll(1, "units")
+
+    # 绑定鼠标滚轮事件
+    main_canvas.bind_all("<MouseWheel>", on_mousewheel)  # Windows/MacOS
+    main_canvas.bind_all("<Button-4>", on_mousewheel_linux)  # Linux 向上
+    main_canvas.bind_all("<Button-5>", on_mousewheel_linux)  # Linux 向下
+
+    # 键盘滚动支持
+    def on_key_scroll(event):
+        if event.keysym == "Up":
+            main_canvas.yview_scroll(-1, "units")
+        elif event.keysym == "Down":
+            main_canvas.yview_scroll(1, "units")
+        elif event.keysym == "Prior":  # Page Up
+            main_canvas.yview_scroll(-1, "pages")
+        elif event.keysym == "Next":  # Page Down
+            main_canvas.yview_scroll(1, "pages")
+        elif event.keysym == "Home":
+            main_canvas.yview_moveto(0)
+        elif event.keysym == "End":
+            main_canvas.yview_moveto(1)
+
+    root.bind_all("<Up>", on_key_scroll)
+    root.bind_all("<Down>", on_key_scroll)
+    root.bind_all("<Prior>", on_key_scroll)
+    root.bind_all("<Next>", on_key_scroll)
+    root.bind_all("<Home>", on_key_scroll)
+    root.bind_all("<End>", on_key_scroll)
+
+    # 现在所有控件都应该添加到 scrollable_frame 而不是 root
+    scrollable_frame.columnconfigure(0, weight=1)
 
     # ---------- 状态管理 ----------
     def set_entry(w: tk.Entry, val: str):
@@ -230,7 +295,7 @@ def run_app():
     root.protocol("WM_DELETE_WINDOW", on_close)
 
     # ========= 全局设置 =========
-    box = ttk.LabelFrame(root, text="全局设置（时间/单位、字体、边界线宽、叠加图层默认值）")
+    box = ttk.LabelFrame(scrollable_frame, text="全局设置（时间/单位、字体、边界线宽、叠加图层默认值）")
     box.grid(row=0, column=0, padx=10, pady=8, sticky="nwe")
 
     # 让某些列可伸缩，文本框/多行文本更好排版
@@ -254,21 +319,29 @@ def run_app():
     ttk.Checkbutton(box, text="转为年平均（除以年数）", variable=var_avg).grid(row=0, column=4, sticky="w", padx=8)
 
     ttk.Label(box, text="英文字体").grid(row=0, column=5, sticky="e")
-    EN_FONT_CHOICES = ["Times New Roman", "Arial", "Calibri", "Cambria", "DejaVu Sans"]
+    # 扩展英文字体选项（常见学术论文字体）
+    EN_FONT_CHOICES = [
+        "Times New Roman", "Arial", "Calibri", "Cambria",
+        "Georgia", "Palatino", "Garamond", "Helvetica",
+        "Century", "Book Antiqua", "Courier New",
+        "DejaVu Sans", "DejaVu Serif", "Liberation Sans", "Liberation Serif"
+    ]
     cb_font_en = ttk.Combobox(box, values=EN_FONT_CHOICES, width=20, state="readonly")
     cb_font_en.set("Times New Roman")
     cb_font_en.grid(row=0, column=6, sticky="w")
 
-    # 常用中文字体候选（跨 Windows / macOS / Adobe / Noto）
+    # 扩展中文字体选项（常见学术论文字体）
     ZH_FONT_CHOICES = [
         "Microsoft YaHei", "SimHei", "SimSun", "DengXian",
-        "KaiTi", "FangSong", "STSong",
-        "Noto Sans CJK SC", "Source Han Sans SC", "Source Han Serif SC",
-        "PingFang SC", "HarmonyOS Sans SC"
+        "KaiTi", "FangSong", "STSong", "STKaiti", "STFangsong",
+        "YouYuan", "LiSu", "STXihei", "STZhongsong",
+        "Noto Sans CJK SC", "Noto Serif CJK SC",
+        "Source Han Sans SC", "Source Han Serif SC",
+        "PingFang SC", "HarmonyOS Sans SC",
+        "Adobe Heiti Std", "Adobe Song Std", "Adobe Kaiti Std"
     ]
 
     ttk.Label(box, text="中文字体").grid(row=0, column=7, sticky="e")
-    # 这里假定 ZH_FONT_CHOICES 已在上文定义
     cb_font_zh = ttk.Combobox(box, values=ZH_FONT_CHOICES, width=20, state="readonly")
     cb_font_zh.set("Microsoft YaHei")
     cb_font_zh.grid(row=0, column=8, sticky="w")
@@ -349,7 +422,7 @@ def run_app():
     var_autoprev = tk.BooleanVar(value=False)
 
     # ========= Notebook =========
-    nb = ttk.Notebook(root); nb.grid(row=1, column=0, padx=10, pady=4, sticky="nwe")
+    nb = ttk.Notebook(scrollable_frame); nb.grid(row=1, column=0, padx=10, pady=4, sticky="nwe")
 
     # =================================== 单图页 ===================================
     page1 = ttk.Frame(nb); nb.add(page1, text="单图")
@@ -385,7 +458,51 @@ def run_app():
 
     ttk.Label(B1, text="配色").grid(row=0, column=6, sticky="e")
     cb_cmap1 = GradientCombo(B1, default_key=DEFAULT_CMAP_KEY, width=200)
-    cb_cmap1.grid(row=0, column=7, sticky="we", padx=(0,6))
+    cb_cmap1.grid(row=0, column=7, sticky="we", padx=(0,2))
+
+    # 导入配色按钮
+    def import_colormap_single():
+        """导入自定义配色文件（支持多种格式）"""
+        file_path = filedialog.askopenfilename(
+            title="选择配色文件",
+            filetypes=[
+                ("ArcGIS色带文件", "*.clr"),
+                ("GMT色带文件", "*.cpt"),
+                ("RGB文本文件", "*.txt;*.rgb;*.dat"),
+                ("Matplotlib样式文件", "*.mplstyle"),
+                ("所有文件", "*.*")
+            ]
+        )
+        if file_path:
+            try:
+                ext = os.path.splitext(file_path)[1].lower()
+
+                # 如果是 .mplstyle 文件，使用原来的方法
+                if ext == '.mplstyle':
+                    import matplotlib.pyplot as plt
+                    plt.style.use(file_path)
+                    messagebox.showinfo("导入成功", f"已导入配色样式：\n{os.path.basename(file_path)}\n\n样式已应用到matplotlib全局设置。")
+                else:
+                    # 使用新的色带导入器
+                    from colormap_importer import import_colormap_from_file, register_imported_colormap
+                    from colormaps import CMAP_REGISTRY
+
+                    name, cmap = import_colormap_from_file(file_path)
+                    key = register_imported_colormap(name, cmap, CMAP_REGISTRY)
+
+                    # 更新下拉框
+                    cb_cmap1.set(key)
+
+                    messagebox.showinfo("导入成功",
+                        f"已导入色带：{name}\n\n"
+                        f"色带已添加到配色下拉框中。\n"
+                        f"您可以在预览中查看效果。")
+            except Exception as e:
+                import traceback
+                error_detail = traceback.format_exc()
+                messagebox.showerror("导入失败", f"{str(e)}\n\n详细信息：\n{error_detail}")
+
+    ttk.Button(B1, text="导入", width=5, command=import_colormap_single).grid(row=0, column=8, padx=2)
 
     ttk.Label(B1, text="预览 宽×高 / DPI").grid(row=1, column=0, sticky="e")
     e_figw1 = tk.Entry(B1, width=6); e_figw1.insert(0, "8.8"); e_figw1.grid(row=1, column=1, sticky="w")
@@ -393,24 +510,32 @@ def run_app():
     e_dpi1  = tk.Entry(B1, width=6); e_dpi1.insert(0, "150"); e_dpi1.grid(row=1, column=3, sticky="w")
 
     C1 = ttk.LabelFrame(page1, text="色带（单图）")
+    C1.grid(row=2, column=0, padx=6, pady=6, sticky="we")
+
+    # 第一行：位置、宽度比例、与图距、标签文本
+    ttk.Label(C1, text="位置").grid(row=0, column=0, sticky="e")
+    cb_loc1 = ttk.Combobox(C1, values=["right","left","top","bottom"], width=8, state="readonly")
+    cb_loc1.set("right"); cb_loc1.grid(row=0, column=1, sticky="w")
+
+    ttk.Label(C1, text="宽度比例").grid(row=0, column=2, sticky="e")
+    e_cbfrac1 = tk.Entry(C1, width=6); e_cbfrac1.insert(0, "0.15"); e_cbfrac1.grid(row=0, column=3, sticky="w")
+    qmark(C1, "色带宽度占整个图的比例，范围0.05-0.3，默认0.15", 0, 4)
+
+    ttk.Label(C1, text="与图距").grid(row=0, column=5, sticky="e")
+    e_cbpad = tk.Entry(C1, width=6); e_cbpad.insert(0, "0.02"); e_cbpad.grid(row=0, column=6, sticky="w")
+
+    ttk.Label(C1, text="标签文本").grid(row=0, column=7, sticky="e")
+    e_cblabtxt1 = tk.Entry(C1, width=16); e_cblabtxt1.insert(0, ""); e_cblabtxt1.grid(row=0, column=8, sticky="w")
+
+    # 第二行：标签字号、刻度字号、色阶上限
+    ttk.Label(C1, text="标签字号/刻度字号").grid(row=1, column=0, sticky="e")
+    e_cblab1 = tk.Entry(C1, width=6); e_cblab1.insert(0, "11"); e_cblab1.grid(row=1, column=1, sticky="w")
+    e_cbtick1 = tk.Entry(C1, width=6); e_cbtick1.insert(0, "10"); e_cbtick1.grid(row=1, column=2, sticky="w")
+
     ttk.Label(C1, text="色阶上限(空=自动)").grid(row=1, column=3, sticky="e")
     e_vmax1 = tk.Entry(C1, width=8);
     e_vmax1.insert(0, "");
     e_vmax1.grid(row=1, column=4, sticky="w")
-
-    C1.grid(row=2, column=0, padx=6, pady=6, sticky="we")
-    ttk.Label(C1, text="位置").grid(row=0, column=0, sticky="e")
-    cb_loc1 = ttk.Combobox(C1, values=["right","left","top","bottom"], width=8, state="readonly")
-    cb_loc1.set("right"); cb_loc1.grid(row=0, column=1, sticky="w")
-    ttk.Label(C1, text="厚度%").grid(row=0, column=2, sticky="e")
-    e_cbw = tk.Entry(C1, width=6); e_cbw.insert(0, "1.6"); e_cbw.grid(row=0, column=3, sticky="w")
-    ttk.Label(C1, text="与图距").grid(row=0, column=4, sticky="e")
-    e_cbpad = tk.Entry(C1, width=6); e_cbpad.insert(0, "0.02"); e_cbpad.grid(row=0, column=5, sticky="w")
-    ttk.Label(C1, text="标签文本").grid(row=0, column=6, sticky="e")
-    e_cblabtxt1 = tk.Entry(C1, width=16); e_cblabtxt1.insert(0, ""); e_cblabtxt1.grid(row=0, column=7, sticky="w")
-    ttk.Label(C1, text="标签字号/刻度字号").grid(row=1, column=0, sticky="e")
-    e_cblab1 = tk.Entry(C1, width=6); e_cblab1.insert(0, "11"); e_cblab1.grid(row=1, column=1, sticky="w")
-    e_cbtick1 = tk.Entry(C1, width=6); e_cbtick1.insert(0, "10"); e_cbtick1.grid(row=1, column=2, sticky="w")
 
     # =================================== 单图页：子图元素（比例尺 & 北箭） ===================================
     D1 = ttk.LabelFrame(page1, text="子图元素（比例尺 & 北箭）")
@@ -508,6 +633,7 @@ def run_app():
             cmap_key=cb_cmap1.get(),
             vmax=_get_float(e_vmax1, None),
             cbar_loc=cb_loc1.get(),
+            cbar_fraction=_get_float(e_cbfrac1, 0.15),  # 新增：色带宽度比例
             cbar_label_text=(e_cblabtxt1.get().strip() or None),
             cbar_label_size=_get_int(e_cblab1, 11),
             cbar_tick_size=_get_int(e_cbtick1, 10),
@@ -552,7 +678,7 @@ def run_app():
             cmap_key=cb_cmap1.get(),
             vmax=(float(e_vmax1.get()) if e_vmax1.get().strip() else None),
             cbar_loc=cb_loc1.get(),
-            cbar_size=f"{float(e_cbw.get())}%",
+            cbar_fraction=float(e_cbfrac1.get() or 0.15),  # 新增：色带宽度比例
             cbar_pad=float(e_cbpad.get()),
             cbar_label_text=(e_cblabtxt1.get().strip() or None),
             cbar_label_size=int(e_cblab1.get()),
@@ -638,9 +764,57 @@ def run_app():
     ttk.Label(B2, text="子图间距 wspace/hspace").grid(row=0, column=3, sticky="e")
     e_wspace = tk.Entry(B2, width=6); e_wspace.insert(0, "0.12"); e_wspace.grid(row=0, column=4, sticky="w")
     e_hspace = tk.Entry(B2, width=6); e_hspace.insert(0, "0.22"); e_hspace.grid(row=0, column=5, sticky="w")
-    ttk.Label(B2, text="配色（全局）").grid(row=0, column=6, sticky="e")
+
+    # 自动布局按钮（函数会在后面定义）
+    auto_layout_btn = ttk.Button(B2, text="自动布局", width=8)
+    auto_layout_btn.grid(row=0, column=6, sticky="w", padx=2)
+    ttk.Label(B2, text="配色（全局）").grid(row=0, column=7, sticky="e")
     cb_cmap2 = GradientCombo(B2, default_key=DEFAULT_CMAP_KEY, width=220)
-    cb_cmap2.grid(row=0, column=7, sticky="we", padx=(0,6))
+    cb_cmap2.grid(row=0, column=8, sticky="we", padx=(0,2))
+
+    # 导入配色按钮（多图页）
+    def import_colormap_multi():
+        """导入自定义配色文件（支持多种格式）"""
+        file_path = filedialog.askopenfilename(
+            title="选择配色文件",
+            filetypes=[
+                ("ArcGIS色带文件", "*.clr"),
+                ("GMT色带文件", "*.cpt"),
+                ("RGB文本文件", "*.txt;*.rgb;*.dat"),
+                ("Matplotlib样式文件", "*.mplstyle"),
+                ("所有文件", "*.*")
+            ]
+        )
+        if file_path:
+            try:
+                ext = os.path.splitext(file_path)[1].lower()
+
+                # 如果是 .mplstyle 文件，使用原来的方法
+                if ext == '.mplstyle':
+                    import matplotlib.pyplot as plt
+                    plt.style.use(file_path)
+                    messagebox.showinfo("导入成功", f"已导入配色样式：\n{os.path.basename(file_path)}\n\n样式已应用到matplotlib全局设置。")
+                else:
+                    # 使用新的色带导入器
+                    from colormap_importer import import_colormap_from_file, register_imported_colormap
+                    from colormaps import CMAP_REGISTRY
+
+                    name, cmap = import_colormap_from_file(file_path)
+                    key = register_imported_colormap(name, cmap, CMAP_REGISTRY)
+
+                    # 更新下拉框
+                    cb_cmap2.set(key)
+
+                    messagebox.showinfo("导入成功",
+                        f"已导入色带：{name}\n\n"
+                        f"色带已添加到配色下拉框中。\n"
+                        f"您可以在预览中查看效果。")
+            except Exception as e:
+                import traceback
+                error_detail = traceback.format_exc()
+                messagebox.showerror("导入失败", f"{str(e)}\n\n详细信息：\n{error_detail}")
+
+    ttk.Button(B2, text="导入", width=5, command=import_colormap_multi).grid(row=0, column=9, padx=2)
 
     ttk.Label(B2, text="面板标题（|分隔）").grid(row=1, column=0, sticky="e")
     e_titles = tk.Entry(B2, width=72); e_titles.insert(0, "(a) WW 暖湿|(b) WD 暖干|(c) CW 冷湿|(d) CD 冷干"); e_titles.grid(row=1, column=1, columnspan=6, sticky="we")
@@ -661,33 +835,102 @@ def run_app():
     var_shared = tk.BooleanVar(value=True)
     ttk.Checkbutton(C2, text="使用共享色带（取消则每幅各自一条）", variable=var_shared).grid(row=0, column=0, sticky="w", columnspan=3)
 
-    ttk.Label(C2, text="共享：位置/厚度占比/刻度数").grid(row=1, column=0, sticky="e")
+    # 共享色带设置 - 第1行
+    ttk.Label(C2, text="共享：位置/宽度比例/刻度数").grid(row=1, column=0, sticky="e")
     cb_loc2 = ttk.Combobox(C2, values=["bottom","top","right","left"], width=8, state="readonly"); cb_loc2.set("right"); cb_loc2.grid(row=1, column=1, sticky="w")
     e_cbfrac = tk.Entry(C2, width=6); e_cbfrac.insert(0, "0.10"); e_cbfrac.grid(row=1, column=2, sticky="w")
-    e_ticks = tk.Entry(C2, width=6); e_ticks.insert(0, "6"); e_ticks.grid(row=1, column=3, sticky="w")
-    ttk.Label(C2, text="共享：标签文本/字号/刻度字号").grid(row=1, column=4, sticky="e")
-    e_cblabtxt2 = tk.Entry(C2, width=18); e_cblabtxt2.insert(0, ""); e_cblabtxt2.grid(row=1, column=5, sticky="w")
-    e_cblab2 = tk.Entry(C2, width=6); e_cblab2.insert(0, "11"); e_cblab2.grid(row=1, column=6, sticky="w")
-    e_cbtick2 = tk.Entry(C2, width=6); e_cbtick2.insert(0, "10"); e_cbtick2.grid(row=1, column=7, sticky="w")
-    ttk.Label(C2, text="共享：色阶上限（空=自动）").grid(row=1, column=8, sticky="e")
-    e_vmax = tk.Entry(C2, width=8); e_vmax.grid(row=1, column=9, sticky="w")
+    qmark(C2, "共享色带宽度比例，范围0.05-0.2，默认0.10", 1, 3)
+    e_ticks = tk.Entry(C2, width=6); e_ticks.insert(0, "6"); e_ticks.grid(row=1, column=4, sticky="w")
+    ttk.Label(C2, text="标签文本/字号/刻度字号").grid(row=1, column=5, sticky="e")
+    e_cblabtxt2 = tk.Entry(C2, width=18); e_cblabtxt2.insert(0, ""); e_cblabtxt2.grid(row=1, column=6, sticky="w")
+    e_cblab2 = tk.Entry(C2, width=6); e_cblab2.insert(0, "11"); e_cblab2.grid(row=1, column=7, sticky="w")
+    e_cbtick2 = tk.Entry(C2, width=6); e_cbtick2.insert(0, "10"); e_cbtick2.grid(row=1, column=8, sticky="w")
+    ttk.Label(C2, text="色阶上限（空=自动）").grid(row=1, column=9, sticky="e")
+    e_vmax = tk.Entry(C2, width=8); e_vmax.grid(row=1, column=10, sticky="w")
 
-    # 分图参数（新增：各自最大值百分位与刻度个数；恢复：标签文本/字号/刻度字号）
-    ttk.Label(C2, text="分图：位置/厚度%/与图距").grid(row=2, column=0, sticky="e")
+    # 共享色带设置 - 第1.5行：色带长度占比
+    ttk.Label(C2, text="色带长度占比(%)").grid(row=1, column=11, sticky="e", padx=(10,0))
+    e_cbar_shrink = tk.Entry(C2, width=6); e_cbar_shrink.insert(0, "75"); e_cbar_shrink.grid(row=1, column=12, sticky="w")
+    qmark(C2, "色带长度占总图长度的百分比\n范围：30-100\n推荐：底部/顶部75%，左侧/右侧100%", 1, 13)
+
+    # 分图色带设置
+    ttk.Label(C2, text="分图：位置/宽度比例/与图距").grid(row=2, column=0, sticky="e")
     cb_per_loc = ttk.Combobox(C2, values=["right","left","top","bottom"], width=8, state="readonly"); cb_per_loc.set("right"); cb_per_loc.grid(row=2, column=1, sticky="w")
-    e_per_size = tk.Entry(C2, width=6); e_per_size.insert(0, "1.6"); e_per_size.grid(row=2, column=2, sticky="w")
-    e_per_pad  = tk.Entry(C2, width=6); e_per_pad.insert(0, "0.02"); e_per_pad.grid(row=2, column=3, sticky="w")
+    e_per_frac = tk.Entry(C2, width=6); e_per_frac.insert(0, "0.05"); e_per_frac.grid(row=2, column=2, sticky="w")
+    qmark(C2, "分图色带宽度比例，范围0.03-0.15，默认0.05", 2, 3)
+    e_per_pad  = tk.Entry(C2, width=6); e_per_pad.insert(0, "0.02"); e_per_pad.grid(row=2, column=4, sticky="w")
 
-    ttk.Label(C2, text="分图：上限百分位(%)").grid(row=2, column=4, sticky="e")
-    e_per_pct = tk.Entry(C2, width=6); e_per_pct.insert(0, "100"); e_per_pct.grid(row=2, column=5, sticky="w")
+    ttk.Label(C2, text="上限百分位(%)").grid(row=2, column=5, sticky="e")
+    e_per_pct = tk.Entry(C2, width=6); e_per_pct.insert(0, "100"); e_per_pct.grid(row=2, column=6, sticky="w")
 
-    ttk.Label(C2, text="分图：刻度个数").grid(row=2, column=6, sticky="e")
-    e_per_nticks = tk.Entry(C2, width=6); e_per_nticks.insert(0, "6"); e_per_nticks.grid(row=2, column=7, sticky="w")
+    ttk.Label(C2, text="刻度个数").grid(row=2, column=7, sticky="e")
+    e_per_nticks = tk.Entry(C2, width=6); e_per_nticks.insert(0, "6"); e_per_nticks.grid(row=2, column=8, sticky="w")
 
     ttk.Label(C2, text="分图：标签文本/字号/刻度字号").grid(row=3, column=0, sticky="e")
     e_per_labtxt = tk.Entry(C2, width=18); e_per_labtxt.insert(0, ""); e_per_labtxt.grid(row=3, column=1, sticky="w")
     e_per_lab = tk.Entry(C2, width=6); e_per_lab.insert(0, "11"); e_per_lab.grid(row=3, column=2, sticky="w")
-    e_per_tick = tk.Entry(C2, width=6); e_per_tick.insert(0, "10"); e_per_tick.grid(row=3, column=3, sticky="w")
+    e_per_tick = tk.Entry(C2, width=6); e_per_tick.insert(0, "10"); e_per_tick.grid(row=3, column=4, sticky="w")
+
+    # 自动布局回调函数（定义在这里，因为需要访问上面定义的所有变量）
+    def auto_spacing_callback():
+        """自动优化布局：计算最优的图片尺寸、间距等参数"""
+        try:
+            from .plotting import optimize_layout
+
+            # 获取当前设置
+            nrows = int(e_rows.get())
+            ncols = int(e_cols.get())
+            use_shared = var_shared.get()
+            cbar_loc = cb_loc2.get()
+            use_shared_scale_val = var_shared_scale.get()
+
+            # 调用优化函数（使用更高的DPI以提升清晰度）
+            layout = optimize_layout(
+                nrows=nrows,
+                ncols=ncols,
+                use_shared_cbar=use_shared,
+                shared_cbar_loc=cbar_loc,
+                use_shared_scale=use_shared_scale_val,
+                dpi=150  # 提升DPI从130到150
+            )
+
+            # 自动应用所有建议值
+            # 1. 更新间距
+            e_wspace.delete(0, tk.END)
+            e_wspace.insert(0, f"{layout['wspace']:.3f}")
+            e_hspace.delete(0, tk.END)
+            e_hspace.insert(0, f"{layout['hspace']:.3f}")
+
+            # 2. 更新图片尺寸
+            e_figw2.delete(0, tk.END)
+            e_figw2.insert(0, f"{layout['fig_width']}")
+            e_figh2.delete(0, tk.END)
+            e_figh2.insert(0, f"{layout['fig_height']}")
+
+            # 3. 更新预览尺寸
+            e_prev_w2.delete(0, tk.END)
+            e_prev_w2.insert(0, str(layout['preview_width']))
+            e_prev_h2.delete(0, tk.END)
+            e_prev_h2.insert(0, str(layout['preview_height']))
+
+            # 4. 更新DPI
+            e_dpi2.delete(0, tk.END)
+            e_dpi2.insert(0, "150")
+
+            # 显示优化结果
+            msg = f"✅ 自动布局完成！已应用以下优化：\n\n"
+            msg += f"📐 图片尺寸：{layout['fig_width']} × {layout['fig_height']} 英寸\n"
+            msg += f"📏 子图间距：wspace={layout['wspace']}, hspace={layout['hspace']}\n"
+            msg += f"🖼️ 预览尺寸：{layout['preview_width']} × {layout['preview_height']} 像素\n"
+            msg += f"🎯 DPI：150\n\n"
+            msg += f"所有参数已自动填充，可直接点击'预览多图'查看效果。"
+
+            messagebox.showinfo("自动布局成功", msg)
+
+        except Exception as e:
+            import traceback
+            error_msg = f"错误信息：{str(e)}\n\n详细信息：\n{traceback.format_exc()}"
+            messagebox.showerror("自动布局失败", error_msg)
 
     # === 每幅配色（动态生成；仅在“取消共享色带”时展开） ===
     C3 = ttk.LabelFrame(page2, text="每幅配色（不统一时分别选择）")
@@ -746,55 +989,124 @@ def run_app():
     D2 = ttk.LabelFrame(page2, text="子图元素（比例尺 & 北箭）")
     D2.grid(row=3, column=0, padx=6, pady=6, sticky="we")
 
-    # 比例尺：长度(单位)/字号/段数
-    ttk.Label(D2, text="比例尺 长度(单位)/字号/段数").grid(row=0, column=0, sticky="e")
+    # ========== 第0行：共享选项（放在最顶部） ==========
+    var_shared_scale = tk.BooleanVar(value=False)
+    chk_shared_scale = ttk.Checkbutton(D2, text="✓ 使用共享比例尺", variable=var_shared_scale)
+    chk_shared_scale.grid(row=0, column=0, columnspan=2, sticky="w", padx=4, pady=4)
+
+    var_shared_north = tk.BooleanVar(value=False)
+    chk_shared_north = ttk.Checkbutton(D2, text="✓ 使用共享北箭", variable=var_shared_north)
+    chk_shared_north.grid(row=0, column=2, columnspan=2, sticky="w", padx=4, pady=4)
+
+    # 提示文字
+    ttk.Label(D2, text="（勾选后，比例尺和北箭只在最后一个子图显示）", foreground="#666").grid(
+        row=0, column=4, columnspan=6, sticky="w", padx=4)
+
+    # ========== 第1行：比例尺参数 ==========
+    ttk.Label(D2, text="比例尺 长度/字号/段数").grid(row=1, column=0, sticky="e")
     e_sckm2 = tk.Entry(D2, width=8); e_sckm2.insert(0, "")
-    e_sckm2.grid(row=0, column=1, sticky="w")
+    e_sckm2.grid(row=1, column=1, sticky="w")
     e_scsize2 = tk.Entry(D2, width=6); e_scsize2.insert(0, "9")
-    e_scsize2.grid(row=0, column=2, sticky="w")
+    e_scsize2.grid(row=1, column=2, sticky="w")
     e_scseg2 = tk.Entry(D2, width=6); e_scseg2.insert(0, "4")
-    e_scseg2.grid(row=0, column=3, sticky="w")
+    e_scseg2.grid(row=1, column=3, sticky="w")
 
     # 线宽/边框/条高
-    ttk.Label(D2, text="线宽/边框/条高").grid(row=0, column=4, sticky="e")
+    ttk.Label(D2, text="线宽/边框/条高").grid(row=1, column=4, sticky="e")
     e_sclw2 = tk.Entry(D2, width=6); e_sclw2.insert(0, "0.7")
-    e_sclw2.grid(row=0, column=5, sticky="w")
+    e_sclw2.grid(row=1, column=5, sticky="w")
     e_scedge2 = tk.Entry(D2, width=6); e_scedge2.insert(0, "0.6")
-    e_scedge2.grid(row=0, column=6, sticky="w")
+    e_scedge2.grid(row=1, column=6, sticky="w")
     e_sch2 = tk.Entry(D2, width=6); e_sch2.insert(0, "0.012")
-    e_sch2.grid(row=0, column=7, sticky="w")
+    e_sch2.grid(row=1, column=7, sticky="w")
 
     # 左距/距底
-    ttk.Label(D2, text="左距/距底").grid(row=0, column=8, sticky="e")
+    ttk.Label(D2, text="左距/距底").grid(row=1, column=8, sticky="e")
     e_scx2 = tk.Entry(D2, width=6); e_scx2.insert(0, "0.08")
-    e_scx2.grid(row=0, column=9, sticky="w")
+    e_scx2.grid(row=1, column=9, sticky="w")
     e_scy2 = tk.Entry(D2, width=6); e_scy2.insert(0, "0.12")
-    e_scy2.grid(row=0, column=10, sticky="w")
+    e_scy2.grid(row=1, column=10, sticky="w")
 
-    # —— 新增：单位 & 空格 —— #
-    ttk.Label(D2, text="单位").grid(row=0, column=11, sticky="e")
+    # ========== 第2行：比例尺样式和单位 ==========
+    ttk.Label(D2, text="样式").grid(row=2, column=0, sticky="e")
+    cb_scstyle2 = ttk.Combobox(D2, values=["分段式","线段式","标尺式","双线式","极简式"], width=10, state="readonly")
+    cb_scstyle2.set("线段式"); cb_scstyle2.grid(row=2, column=1, sticky="w")
+
+    # 导入比例尺样式按钮
+    def import_scale_bar_style():
+        """导入自定义比例尺样式"""
+        file_path = filedialog.askopenfilename(
+            title="选择比例尺样式文件（Python）",
+            filetypes=[("Python文件", "*.py"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            try:
+                import custom_styles
+                style_name, func = custom_styles.import_scale_bar_style_from_python(file_path)
+                custom_styles.register_custom_scale_bar_function(style_name, func)
+
+                # 更新下拉框
+                current_values = list(cb_scstyle2['values'])
+                if style_name not in current_values:
+                    current_values.append(style_name)
+                    cb_scstyle2['values'] = current_values
+                cb_scstyle2.set(style_name)
+
+                messagebox.showinfo("导入成功", f"已导入比例尺样式：{style_name}\n\n样式已添加到下拉框中。")
+            except Exception as e:
+                messagebox.showerror("导入失败", f"无法导入比例尺样式：\n{str(e)}")
+
+    ttk.Button(D2, text="导入", width=5, command=import_scale_bar_style).grid(row=2, column=2, padx=2)
+
+    ttk.Label(D2, text="单位").grid(row=2, column=3, sticky="e")
     e_scunit2 = tk.Entry(D2, width=6); e_scunit2.insert(0, "km")
-    e_scunit2.grid(row=0, column=12, sticky="w")
+    e_scunit2.grid(row=2, column=4, sticky="w")
 
-    ttk.Label(D2, text="空格").grid(row=0, column=13, sticky="e")
+    ttk.Label(D2, text="空格").grid(row=2, column=5, sticky="e")
     cb_scsp2 = ttk.Combobox(D2, values=["无","有"], width=4, state="readonly")
-    cb_scsp2.set("无"); cb_scsp2.grid(row=0, column=14, sticky="w")
+    cb_scsp2.set("无"); cb_scsp2.grid(row=2, column=6, sticky="w")
 
-    # 北箭 字号/样式/距边
-    ttk.Label(D2, text="北箭 字号/样式/距边").grid(row=1, column=0, sticky="e")
+    # ========== 第3行：北箭参数 ==========
+    ttk.Label(D2, text="北箭 字号/样式/距边").grid(row=3, column=0, sticky="e")
     e_nsize2 = tk.Entry(D2, width=6); e_nsize2.insert(0, "10")
-    e_nsize2.grid(row=1, column=1, sticky="w")
-    cb_nstyle2 = ttk.Combobox(D2, values=["triangle","arrow","compass"], width=10, state="readonly")
-    cb_nstyle2.set("triangle"); cb_nstyle2.grid(row=1, column=2, sticky="w")
+    e_nsize2.grid(row=3, column=1, sticky="w")
+    cb_nstyle2 = ttk.Combobox(D2, values=["三角形","简洁箭头","指南针式","星形","极简箭头"], width=12, state="readonly")
+    cb_nstyle2.set("简洁箭头"); cb_nstyle2.grid(row=3, column=2, sticky="w")
+
+    # 导入北箭样式按钮
+    def import_north_arrow_style():
+        """导入自定义北箭样式"""
+        file_path = filedialog.askopenfilename(
+            title="选择北箭样式文件（Python）",
+            filetypes=[("Python文件", "*.py"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            try:
+                import custom_styles
+                style_name, func = custom_styles.import_north_arrow_style_from_python(file_path)
+                custom_styles.register_custom_north_arrow_function(style_name, func)
+
+                # 更新下拉框
+                current_values = list(cb_nstyle2['values'])
+                if style_name not in current_values:
+                    current_values.append(style_name)
+                    cb_nstyle2['values'] = current_values
+                cb_nstyle2.set(style_name)
+
+                messagebox.showinfo("导入成功", f"已导入北箭样式：{style_name}\n\n样式已添加到下拉框中。")
+            except Exception as e:
+                messagebox.showerror("导入失败", f"无法导入北箭样式：\n{str(e)}")
+
+    ttk.Button(D2, text="导入", width=5, command=import_north_arrow_style).grid(row=3, column=3, padx=2)
     e_npad2 = tk.Entry(D2, width=6); e_npad2.insert(0, "0.08")
-    e_npad2.grid(row=1, column=3, sticky="w")
+    e_npad2.grid(row=3, column=3, sticky="w")
 
     E2 = ttk.LabelFrame(page2, text="预览 / 导出")
     E2.grid(row=5, column=0, padx=6, pady=6, sticky="we")
     ttk.Label(E2, text="预览 宽×高 / DPI").grid(row=0, column=0, sticky="e")
     e_figw2 = tk.Entry(E2, width=6); e_figw2.insert(0, "11.5"); e_figw2.grid(row=0, column=1, sticky="w")
     e_figh2 = tk.Entry(E2, width=6); e_figh2.insert(0, "8.8"); e_figh2.grid(row=0, column=2, sticky="w")
-    e_dpi2  = tk.Entry(E2, width=6); e_dpi2.insert(0, "130"); e_dpi2.grid(row=0, column=3, sticky="w")
+    e_dpi2  = tk.Entry(E2, width=6); e_dpi2.insert(0, "150"); e_dpi2.grid(row=0, column=3, sticky="w")  # 提升默认DPI
 
     def _parse_tif_list():
         return [ln.strip() for ln in txt_list.get("1.0","end").splitlines() if ln.strip()]
@@ -845,70 +1157,90 @@ def run_app():
             # 给个合理范围，避免太夸张
             dpi_eff = int(max(50, min(800, min(cand))))
 
-        make_grid_map(
-            # 数据与时间
-            tif_list=tlist, border_shp=shp, overlay_layers=parse_overlay(),
-            year_start=_get_int(e_y1, 1981), year_end=_get_int(e_y2, 2020), as_yearly=var_avg.get(),
+        # 定义重绘回调函数
+        def redraw_with_adjustments(position_adjustments):
+            """使用新的位置调整参数重新绘制图形"""
+            import matplotlib.pyplot as plt
+            # 关闭旧图形，避免内存泄漏
+            plt.close('all')
 
-            # 字体
-            font_en=cb_font_en.get(), font_zh=cb_font_zh.get(),
+            return make_grid_map(
+                # 数据与时间
+                tif_list=tlist, border_shp=shp, overlay_layers=parse_overlay(),
+                year_start=_get_int(e_y1, 1981), year_end=_get_int(e_y2, 2020), as_yearly=var_avg.get(),
 
-            # 布局与标题
-            nrows=nrows, ncols=ncols, panel_titles=titles,
-            caption=e_caption.get().strip(), caption_size=_get_int(e_capsize, 12), caption_y=_get_float(e_capy, 0.02),
-            title_size=_get_int(e_tsz2, 11), title_pad=_get_float(e_tpad2, 5),
+                # 字体
+                font_en=cb_font_en.get(), font_zh=cb_font_zh.get(),
 
-            # 边界/色带（主色带 + 面板色带）
-            border_lw=_get_float(e_bdlw, 0.8),
-            cmap_key=cb_cmap2.get(),
-            panel_cmaps=([cb.get() for cb in panel_cmap_boxes] if not var_shared.get() else None),
+                # 布局与标题
+                nrows=nrows, ncols=ncols, panel_titles=titles,
+                caption=e_caption.get().strip(), caption_size=_get_int(e_capsize, 12), caption_y=_get_float(e_capy, 0.02),
+                title_size=_get_int(e_tsz2, 11), title_pad=_get_float(e_tpad2, 5),
 
-            # 共享/分图色带控制
-            share_vmax=_get_float(e_vmax, None),  # 共享上限：空=自动（全局真实最大值）
-            use_shared_cbar=var_shared.get(),
-            shared_cbar_loc=cb_loc2.get(),
-            shared_cbar_label_text=(e_cblabtxt2.get().strip() or None),
-            shared_cbar_label_size=_get_int(e_cblab2, 11),
-            shared_cbar_tick_size=_get_int(e_cbtick2, 10),
-            shared_cbar_ticks=_get_int(e_ticks, 6),
+                # 边界/色带（主色带 + 面板色带）
+                border_lw=_get_float(e_bdlw, 0.8),
+                cmap_key=cb_cmap2.get(),
+                panel_cmaps=([cb.get() for cb in panel_cmap_boxes] if not var_shared.get() else None),
 
-            per_cbar_loc=cb_per_loc.get(),
-            per_cbar_pad=_get_float(e_per_pad, 0.04),
-            per_cbar_label_text=(e_per_labtxt.get().strip() or None),
-            per_cbar_label_size=_get_int(e_per_lab, 11),
-            per_cbar_tick_size=_get_int(e_per_tick, 10),
-            per_cbar_ticks=_get_int(e_per_nticks, 6),
-            # 关键：留空(None) = 用每幅真实最大值；填 98/95 等才按百分位
-            per_vmax_percentile=_get_float(e_per_pct, None),
+                # 共享/分图色带控制
+                share_vmax=_get_float(e_vmax, None),
+                use_shared_cbar=var_shared.get(),
+                shared_cbar_loc=cb_loc2.get(),
+                shared_cbar_frac=_get_float(e_cbfrac, 0.10),
+                shared_cbar_shrink=_get_float(e_cbar_shrink, 75),
+                shared_cbar_label_text=(e_cblabtxt2.get().strip() or None),
+                shared_cbar_label_size=_get_int(e_cblab2, 11),
+                shared_cbar_tick_size=_get_int(e_cbtick2, 10),
+                shared_cbar_ticks=_get_int(e_ticks, 6),
 
-            # —— 比例尺（参数名已映射到绘图层）——
-            # —— 比例尺（对齐 plotting.make_grid_map 新接口）——
-            scale_length=_get_float(e_sckm2, None),
-            scale_unit=(e_scunit2.get().strip() or "km"),
-            scale_unit_sep=(" " if cb_scsp2.get() == "有" else ""),
-            scale_segments=_get_int(e_scseg2, 4),
-            scale_bar_h=_get_float(e_sch2, 0.012),
-            scale_edge_lw=_get_float(e_scedge2, 0.6),
-            scale_line_lw=_get_float(e_sclw2, 0.7),
-            scale_txt_size=_get_int(e_scsize2, 9),
-            scale_anchor="SW",
-            scale_pad_x=_get_float(e_scx2, 0.08),
-            scale_pad_y=_get_float(e_scy2, 0.12),
+                per_cbar_loc=cb_per_loc.get(),
+                per_cbar_size=_get_float(e_per_frac, 0.05),
+                per_cbar_pad=_get_float(e_per_pad, 0.04),
+                per_cbar_label_text=(e_per_labtxt.get().strip() or None),
+                per_cbar_label_size=_get_int(e_per_lab, 11),
+                per_cbar_tick_size=_get_int(e_per_tick, 10),
+                per_cbar_ticks=_get_int(e_per_nticks, 6),
+                per_vmax_percentile=_get_float(e_per_pct, None),
 
-            # —— 北箭（对齐新接口）——
-            north_style=cb_nstyle2.get(),
-            north_size_frac=0.06,
-            north_anchor="NE",
-            north_pad_x=_get_float(e_npad2, 0.08),
-            north_pad_y=_get_float(e_npad2, 0.08),
-            north_txt_size=_get_int(e_nsize2, 10),
+                # 比例尺
+                scale_length=_get_float(e_sckm2, None),
+                scale_unit=(e_scunit2.get().strip() or "km"),
+                scale_unit_sep=(" " if cb_scsp2.get() == "有" else ""),
+                scale_segments=_get_int(e_scseg2, 4),
+                scale_bar_h=_get_float(e_sch2, 0.012),
+                scale_edge_lw=_get_float(e_scedge2, 0.6),
+                scale_line_lw=_get_float(e_sclw2, 0.7),
+                scale_txt_size=_get_int(e_scsize2, 9),
+                scale_anchor="SW",
+                scale_pad_x=_get_float(e_scx2, 0.08),
+                scale_pad_y=_get_float(e_scy2, 0.12),
+                scale_style=cb_scstyle2.get(),
+                use_shared_scale=var_shared_scale.get(),
 
-            # 画布尺寸 + 预览用 DPI
-            fig_w=fig_w_in, fig_h=fig_h_in, dpi=dpi_eff,
-            wspace=_get_float(e_wspace, 0.12), hspace=_get_float(e_hspace, 0.22),
+                # 北箭
+                north_style=cb_nstyle2.get(),
+                north_size_frac=0.06,
+                north_anchor="NE",
+                north_pad_x=_get_float(e_npad2, 0.08),
+                north_pad_y=_get_float(e_npad2, 0.08),
+                north_txt_size=_get_int(e_nsize2, 10),
+                use_shared_north=var_shared_north.get(),
 
-            preview=True
-        )
+                # 画布尺寸 + 预览用 DPI
+                fig_w=fig_w_in, fig_h=fig_h_in, dpi=dpi_eff,
+                wspace=_get_float(e_wspace, 0.12), hspace=_get_float(e_hspace, 0.22),
+
+                preview=True,
+                position_adjustments=position_adjustments
+            )
+
+        # 首次生成图形
+        fig = redraw_with_adjustments(None)
+
+        # 打开交互式预览窗口
+        if fig:
+            from interactive_preview import show_interactive_preview
+            show_interactive_preview(fig, redraw_with_adjustments, is_grid=True)
 
     def export_grid():
         shp, label = _get_multi_shp()
@@ -925,6 +1257,10 @@ def run_app():
         vmax = float(e_vmax.get()) if e_vmax.get().strip() else None
         titles = [s.strip() for s in e_titles.get().split("|")] if e_titles.get().strip() else None
         save_state()
+
+        # 加载保存的位置调整参数
+        from interactive_preview import load_adjustments
+        position_adjustments = load_adjustments()
 
         make_grid_map(
             tif_list=tlist, border_shp=shp, overlay_layers=parse_overlay(),
@@ -944,11 +1280,13 @@ def run_app():
 
             use_shared_cbar=var_shared.get(),
             shared_cbar_loc=cb_loc2.get(), shared_cbar_frac=float(e_cbfrac.get()),
+            shared_cbar_shrink=float(e_cbar_shrink.get() or 75),  # 色带长度占比（百分比）
             shared_cbar_label_text=(e_cblabtxt2.get().strip() or None),
             shared_cbar_label_size=int(e_cblab2.get()), shared_cbar_tick_size=int(e_cbtick2.get()),
             shared_cbar_ticks=int(e_ticks.get()),
 
-            per_cbar_loc=cb_per_loc.get(), per_cbar_size=f"{float(e_per_size.get())}%",
+            per_cbar_loc=cb_per_loc.get(),
+            per_cbar_size=float(e_per_frac.get() or 0.05),  # 分图色带宽度比例
             per_cbar_pad=float(e_per_pad.get()), per_cbar_label_text=(e_per_labtxt.get().strip() or None),
             per_cbar_label_size=int(e_per_lab.get()), per_cbar_tick_size=int(e_per_tick.get()),
             per_cbar_ticks=int(e_per_nticks.get() or 6),
@@ -966,6 +1304,8 @@ def run_app():
             scale_anchor="SW",
             scale_pad_x=float(e_scx2.get()),
             scale_pad_y=float(e_scy2.get()),
+            scale_style=cb_scstyle2.get(),
+            use_shared_scale=var_shared_scale.get(),
 
             # 北箭
             north_style=cb_nstyle2.get(),
@@ -974,10 +1314,12 @@ def run_app():
             north_pad_x=float(e_npad2.get()),
             north_pad_y=float(e_npad2.get()),
             north_txt_size=int(e_nsize2.get()),
+            use_shared_north=var_shared_north.get(),
 
             wspace=float(e_wspace.get()), hspace=float(e_hspace.get()),
             fig_w=float(e_figw2.get()), fig_h=float(e_figh2.get()), dpi=int(e_dpi2.get()),
-            save_png=e_png2.get().strip(), save_pdf=e_pdf2.get().strip(), preview=False
+            save_png=e_png2.get().strip(), save_pdf=e_pdf2.get().strip(), preview=False,
+            position_adjustments=position_adjustments  # 关键：使用保存的位置调整参数
 
         )
 
@@ -1001,6 +1343,9 @@ def run_app():
     e_prev_h2.insert(0, "")  # 例如可填 900
     e_prev_h2.grid(row=0, column=6)
 
+    # 现在所有控件都已定义，绑定自动布局按钮的命令
+    auto_layout_btn.config(command=auto_spacing_callback)
+
     # ------- 注册控件 -------
     entries = {
         "e_y1": e_y1, "e_y2": e_y2, "e_bdlw": e_bdlw,
@@ -1008,7 +1353,7 @@ def run_app():
         "e_tif": e_tif, "e_shp1": e_shp1, "e_png1": e_png1, "e_pdf1": e_pdf1,
         "e_title": e_title, "e_tsize": e_tsize, "e_tpad": e_tpad,
         "e_figw1": e_figw1, "e_figh1": e_figh1, "e_dpi1": e_dpi1,
-        "e_cbw": e_cbw, "e_cbpad": e_cbpad, "e_cblabtxt1": e_cblabtxt1, "e_cblab1": e_cblab1, "e_cbtick1": e_cbtick1,
+        "e_cbfrac1": e_cbfrac1, "e_cbpad": e_cbpad, "e_cblabtxt1": e_cblabtxt1, "e_cblab1": e_cblab1, "e_cbtick1": e_cbtick1,
         "e_sckm1": e_sckm1, "e_scsize1": e_scsize1, "e_scseg1": e_scseg1,
         "e_sclw1": e_sclw1, "e_scedge1": e_scedge1, "e_sch1": e_sch1,
         "e_scx1": e_scx1, "e_scy1": e_scy1, "e_nsize1": e_nsize1, "e_npad1": e_npad1,
@@ -1020,7 +1365,7 @@ def run_app():
         "e_titles": e_titles, "e_tsz2": e_tsz2, "e_tpad2": e_tpad2,
         "e_caption": e_caption, "e_capsize": e_capsize, "e_capy": e_capy,
         "e_cbfrac": e_cbfrac, "e_ticks": e_ticks, "e_cblabtxt2": e_cblabtxt2, "e_cblab2": e_cblab2, "e_cbtick2": e_cbtick2,
-        "e_vmax": e_vmax, "e_per_size": e_per_size, "e_per_pad": e_per_pad,
+        "e_vmax": e_vmax, "e_per_frac": e_per_frac, "e_per_pad": e_per_pad,
         "e_per_labtxt": e_per_labtxt, "e_per_lab": e_per_lab, "e_per_tick": e_per_tick,
         "e_sckm2": e_sckm2, "e_scsize2": e_scsize2, "e_scseg2": e_scseg2,
         "e_sclw2": e_sclw2, "e_scedge2": e_scedge2, "e_sch2": e_sch2,
@@ -1069,7 +1414,7 @@ def run_app():
         "e_tif":"", "e_shp1":"", "e_png1":r"E:\map_outputs\single.png","e_pdf1":r"E:\map_outputs\single.pdf",
         "e_title":"(b) WD 暖干（平均发生天数）","e_tsize":"12","e_tpad":"6",
         "e_figw1":"8.8","e_figh1":"6.6","e_dpi1":"150",
-        "e_cbw":"1.6","e_cbpad":"0.02","e_cblabtxt1":"","e_cblab1":"11","e_cbtick1":"10",
+        "e_cbfrac1":"0.15","e_cbpad":"0.02","e_cblabtxt1":"","e_cblab1":"11","e_cbtick1":"10",
         "e_sckm1":"", "e_scsize1":"9","e_scseg1":"4",
         "e_sclw1":"0.7","e_scedge1":"0.6","e_sch1":"0.012",
         "e_scx1":"0.08","e_scy1":"0.12","e_nsize1":"10","e_npad1":"0.08",
@@ -1081,7 +1426,7 @@ def run_app():
         "e_tsz2":"11","e_tpad2":"5",
         "e_caption":"复合极端事件多年平均发生天数（1981–2020）","e_capsize":"12","e_capy":"0.02",
         "e_cbfrac":"0.10","e_ticks":"6","e_cblabtxt2":"","e_cblab2":"11","e_cbtick2":"10",
-        "e_vmax":"", "e_per_size":"1.6","e_per_pad":"0.02",
+        "e_vmax":"", "e_per_frac":"0.05","e_per_pad":"0.02",
         "e_sckm2":"", "e_scsize2":"9","e_scseg2":"4",
         "e_sclw2":"0.7","e_scedge2":"0.6","e_sch2":"0.012",
         "e_scx2":"0.08","e_scy2":"0.12","e_nsize2":"10","e_npad2":"0.08",

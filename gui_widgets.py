@@ -27,6 +27,59 @@ def make_gradient_image(cmap_key, width=120, height=14):
     _GRAD_IMG_CACHE[key] = img
     return img
 
+class CollapsibleFrame(ttk.Frame):
+    """可折叠的面板组件，用于组织复杂的GUI控件"""
+    def __init__(self, parent, text="", default_open=True, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.columnconfigure(0, weight=1)
+
+        # 创建标题栏
+        self.title_frame = ttk.Frame(self)
+        self.title_frame.grid(row=0, column=0, sticky="ew", pady=(0, 2))
+        self.title_frame.columnconfigure(1, weight=1)
+
+        # 折叠/展开按钮
+        self.is_open = tk.BooleanVar(value=default_open)
+        self.toggle_btn = ttk.Button(
+            self.title_frame,
+            text="▼" if default_open else "▶",
+            width=3,
+            command=self._toggle
+        )
+        self.toggle_btn.grid(row=0, column=0, sticky="w")
+
+        # 标题标签
+        self.title_label = ttk.Label(
+            self.title_frame,
+            text=text,
+            font=("", 10, "bold")
+        )
+        self.title_label.grid(row=0, column=1, sticky="w", padx=(5, 0))
+
+        # 内容容器
+        self.content_frame = ttk.Frame(self, relief="groove", borderwidth=1)
+        if default_open:
+            self.content_frame.grid(row=1, column=0, sticky="nsew", padx=(10, 0))
+
+        self.rowconfigure(1, weight=1)
+
+    def _toggle(self):
+        """切换折叠/展开状态"""
+        if self.is_open.get():
+            # 折叠
+            self.content_frame.grid_remove()
+            self.toggle_btn.config(text="▶")
+            self.is_open.set(False)
+        else:
+            # 展开
+            self.content_frame.grid(row=1, column=0, sticky="nsew", padx=(10, 0))
+            self.toggle_btn.config(text="▼")
+            self.is_open.set(True)
+
+    def get_content_frame(self):
+        """获取内容框架，用于添加子控件"""
+        return self.content_frame
+
 class GradientCombo(tk.Frame):
     """像 Combobox 一样：get()/set()；但下拉菜单每项带渐变缩略图。"""
     def __init__(self, master, default_key=DEFAULT_CMAP_KEY, width=200, **kw):
